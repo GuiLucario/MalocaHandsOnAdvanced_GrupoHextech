@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Sistema Integrado</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .panel {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        .camera-preview {
+            width: 100%;
+            border-radius: 8px;
+            background: #333;
+        }
+        .sensor-box {
+            margin: 15px 0;
+            padding: 15px;
+            border-radius: 5px;
+        }
+        #motion-box {
+            background-color: #ffebee;
+        }
+        #motion-box.active {
+            background-color: #c8e6c9;
+        }
+        #distance-box {
+            background-color: #e3f2fd;
+        }
+        .slider-container {
+            margin: 20px 0;
+        }
+        .slider {
+            width: 100%;
+            height: 15px;
+        }
+        .value-display {
+            font-size: 24px;
+            margin: 10px 0;
+        }
+        .controls {
+            text-align: center;
+            margin-top: 20px;
+        }
+        button {
+            padding: 12px 24px;
+            font-size: 16px;
+            background: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        button:hover {
+            background: #1976D2;
+            transform: scale(1.05);
+        }
+        #capturedImage {
+            width: 100%;
+            margin-top: 10px;
+            border-radius: 8px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Coluna da Câmera -->
+        <div class="panel">
+            <h1>Controle da Câmera</h1>
+            <img class="camera-preview" src="{{ url_for('video_feed') }}">
+            <img id="capturedImage">
+            <div class="controls">
+                <button onclick="capturePhoto()" id="captureBtn">
+                    📸 Capturar Foto
+                </button>
+            </div>
+        </div>
+
+        <!-- Coluna de Controle -->
+        <div class="panel">
+            <h1>Controle de Sensores</h1>
+
+            <div class="slider-container">
+                <h2>Servo Motor</h2>
+                <input type="range" class="slider" id="servoSlider"
+                       min="0" max="90" value="0"
+                       oninput="updateServo(this.value)">
+                <div class="value-display">
+                    Ângulo: <span id="angleValue">0</span>°
+                </div>
+            </div>
+
+            <div class="sensor-box" id="motion-box">
+                <h2>Sensor de Presença</h2>
+                <div id="motionStatus">Nenhum movimento detectado</div>
+            </div>
+
+            <div class="sensor-box" id="distance-box">
+                <h2>Sensor de Distância</h2>
+                <div class="value-display">
+                    <span id="distanceValue">0.00</span> cm
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Controle da Câmera
+        async function capturePhoto() {
+            const btn = document.getElementById('captureBtn');
+            const livePreview = document.querySelector('.camera-preview');
+            const capturedImage = document.getElementById('capturedImage');
+
+            if (capturedImage.style.display === 'block') {
+                capturedImage.style.display = 'none';
+                livePreview.style.display = 'block';
+                btn.innerHTML = '📸 Capturar Foto';
+                return;
+            }
+
+            try {
+                btn.disabled = true;
+                btn.innerHTML = '⏳ Processando...';
+
+                const response = await fetch('/capture', { method: 'POST' });
+                const data = await response.json();
+
+                capturedImage.src = `/static/photos/${data.filename}?t=${Date.now()}`;
+                capturedImage.style.display = 'block';
+                livePreview.style.display = 'none';
+
+                btn.innerHTML = '🔄 Voltar para Visualização Ao Vivo';
+            } catch (error) {
+                alert('Erro na captura: ' + error.message);
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        // Controle do Servo
+        function updateServo(angle) {
+            document.getElementById('angleValue').textContent = angle;
+            fetch('/set_angle', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ angle: angle })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'OK') {
+                    document.getElementById('angleValue').textContent = data.angle;
+                }
+            });
+        }
+
+        // Atualização dos Sensores
+        function updateSensors() {
+            fetch('/get_sensors')
+                .then(response => response.json())
+                .then(data => {
+                    const motionBox = document.getElementById('motion-box');
+                    const motionStatus = document.getElementById('motionStatus');
+                    if (data.motion) {
+                        motionBox.classList.add('active');
+                        motionStatus.textContent = "Movimento detectado!";
+                    } else {
+                        motionBox.classList.remove('active');
+                        motionStatus.textContent = "Nenhum movimento detectado";
+                    }
+                    document.getElementById('distanceValue').textContent =
+                        data.distance.toFixed(2);
+                });
+        }
+
+        setInterval(updateSensors, 500);
+        updateSensors();
+    </script>
+</body>
+</html>
